@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -6,64 +5,80 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Upload, Image, Scan, AlertCircle, Leaf, CheckCircle } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import { analyzeCropImage, DiseaseAnalysisResult } from "@/services/aiModelService";
 
 const Analysis = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [analysisResult, setAnalysisResult] = useState<any | null>(null);
+  const [analysisResult, setAnalysisResult] = useState<DiseaseAnalysisResult | null>(null);
   const [cropType, setCropType] = useState("wheat");
+  const { toast } = useToast();
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
+      
+      // Validate file size (max 10MB)
+      if (file.size > 10 * 1024 * 1024) {
+        toast({
+          title: "File too large",
+          description: "Please select an image smaller than 10MB",
+          variant: "destructive"
+        });
+        return;
+      }
+      
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        toast({
+          title: "Invalid file type",
+          description: "Please select an image file (JPEG, PNG, or WebP)",
+          variant: "destructive"
+        });
+        return;
+      }
+      
       setSelectedFile(file);
       setPreviewUrl(URL.createObjectURL(file));
       setAnalysisResult(null);
     }
   };
 
-  const handleAnalyze = () => {
-    if (!selectedFile) return;
+  const handleAnalyze = async () => {
+    if (!selectedFile) {
+      toast({
+        title: "No image selected",
+        description: "Please upload an image first",
+        variant: "destructive"
+      });
+      return;
+    }
     
     setIsAnalyzing(true);
     
-    // Simulate analysis with a timeout
-    setTimeout(() => {
-      // This is mock data. In a real app, this would come from an API
-      const mockResult = {
-        disease: "Wheat Leaf Rust",
-        confidence: 95.7,
-        scientificName: "Puccinia triticina",
-        severity: "Moderate",
-        description: "Wheat leaf rust is a fungal disease that affects wheat crops. It appears as small, round, orange-brown pustules on the leaves, which can reduce photosynthesis and yield.",
-        symptoms: [
-          "Orange-brown pustules on leaf surfaces",
-          "Circular or oval-shaped lesions",
-          "Yellowing of leaf tissue around pustules",
-          "Premature leaf death in severe cases"
-        ],
-        causes: [
-          "Fungal pathogen Puccinia triticina",
-          "Warm temperatures (60-80°F)",
-          "High humidity",
-          "Extended leaf wetness periods"
-        ],
-        treatments: [
-          "Apply fungicide treatments (e.g., propiconazole, tebuconazole)",
-          "Rotate crops to reduce disease pressure",
-          "Plant resistant wheat varieties",
-          "Remove volunteer wheat to break disease cycle",
-          "Optimize planting dates to avoid peak disease conditions"
-        ],
-        impact: "Yield losses can range from 5-30% in moderate to severe infections. Quality of grain may also be affected."
-      };
+    try {
+      const result = await analyzeCropImage(selectedFile, cropType);
+      setAnalysisResult(result);
       
-      setAnalysisResult(mockResult);
+      toast({
+        title: "Analysis Complete",
+        description: `Detected: ${result.disease} with ${result.confidence.toFixed(1)}% confidence`,
+        variant: "default"
+      });
+    } catch (error) {
+      console.error("Analysis failed:", error);
+      toast({
+        title: "Analysis failed",
+        description: "There was an error analyzing your image. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
       setIsAnalyzing(false);
-    }, 3000);
+    }
   };
 
   const handleReset = () => {
